@@ -1,6 +1,22 @@
 import LedgerTransportU2F from '@ledgerhq/hw-transport-u2f'
 import LedgerTransportWebusb from '@ledgerhq/hw-transport-webusb'
-import Ledger, {AddressTypeNibbles} from '@cardano-foundation/ledgerjs-hw-app-cardano'
+import Ledger, {
+  AddressType,
+  TxOutput as LedgerTxOutput,
+  TxInput as LedgerTxInput,
+  Withdrawal as LedgerTxWithdrawal,
+  Certificate as LedgerTxCertificate,
+  AssetGroup as LedgerTxAssetGroup,
+  TxOutputDestinationType as LedgerTxOutputDestinationType,
+  CertificateType as LedgerCertificateType,
+  PoolOwnerType as LedgerPoolOwnerType,
+  PoolOwner as LedgerPoolOwner,
+  RelayType as LedgerRelayType,
+  Relay as LedgerRelay,
+  GetExtendedPublicKeyResponse as LedgerGetExtendedPublicKeyResponse,
+  Witness as LedgerWitness,
+  SignTransactionResponse as LedgerSignTransactionResponse,
+} from '@cardano-foundation/ledgerjs-hw-app-cardano'
 import * as cbor from 'borc'
 import CachedDeriveXpubFactory from '../helpers/CachedDeriveXpubFactory'
 import debugLog from '../../helpers/debugLog'
@@ -48,18 +64,9 @@ import {
   TxStakingKeyRegistrationCert,
   TxWithdrawal,
 } from '../types'
-import {
-  LedgerAssetGroup,
-  LedgerCertificate,
-  LedgerGetExtendedPublicKeyResponse,
-  LedgerInput,
-  LedgerOutput,
-  LedgerSignTransactionResponse,
-  LedgerWithdrawal,
-  LedgerWitness,
-} from './ledger-types'
 import {TxSigned, TxAux, CborizedCliWitness} from './types'
 import {groupTokenBundleByPolicyId} from '../helpers/tokenFormater'
+import {TxRelayType, TxStakepoolRelay} from './helpers/poolCertificateUtils'
 
 const isWebUsbSupported = async () => {
   const isSupported = await LedgerTransportWebusb.isSupported()
@@ -114,7 +121,7 @@ const ShelleyLedgerCryptoProvider = async ({
   const ledger = new Ledger(transport)
   const derivationScheme = derivationSchemes.v2
 
-  const version = await ledger.getVersion()
+  const version = (await ledger.getVersion()).version
 
   const getVersion = (): string => `${version.major}.${version.minor}.${version.patch}`
 
@@ -127,11 +134,11 @@ const ShelleyLedgerCryptoProvider = async ({
     derivationPaths: BIP32Path[]
   ): Promise<LedgerGetExtendedPublicKeyResponse[]> => {
     if (isFeatureSupported(CryptoProviderFeature.BULK_EXPORT)) {
-      return await ledger.getExtendedPublicKeys(derivationPaths)
+      return await ledger.getExtendedPublicKeys({paths: derivationPaths})
     }
     const response: LedgerGetExtendedPublicKeyResponse[] = []
     for (const path of derivationPaths) {
-      response.push(await ledger.getExtendedPublicKey(path))
+      response.push(await ledger.getExtendedPublicKey({path}))
     }
     return response
   }
@@ -172,12 +179,16 @@ const ShelleyLedgerCryptoProvider = async ({
     stakingPath?: BIP32Path
   ): Promise<void> {
     try {
-      await ledger.showAddress(
-        AddressTypeNibbles.BASE, // TODO: retrieve from the address
-        network.networkId,
-        absDerivationPath,
-        stakingPath
-      )
+      await ledger.showAddress({
+        network: {networkId: network.networkId, protocolMagic: network.protocolMagic},
+        address: {
+          type: AddressType.BASE,
+          params: {
+            spendingPath: absDerivationPath,
+            stakingPath,
+          },
+        },
+      })
     } catch (err) {
       throw NamedError('LedgerOperationError', {message: `${err.name}: ${err.message}`})
     }
@@ -191,7 +202,10 @@ const ShelleyLedgerCryptoProvider = async ({
     return derivationScheme
   }
 
-  function prepareInput(input: TxInput, addressToAbsPathMapper: AddressToPathMapper): LedgerInput {
+  function prepareInput(
+    input: TxInput,
+    addressToAbsPathMapper: AddressToPathMapper
+  ): LedgerTxInput {
     return {
       txHashHex: input.txHash,
       outputIndex: input.outputIndex,
@@ -199,7 +213,7 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
-  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerAssetGroup[] => {
+  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerTxAssetGroup[] => {
     // TODO: refactor, we should check the whole tx againt the version beforehand
     if (tokenBundle.length > 0 && !isFeatureSupported(CryptoProviderFeature.MULTI_ASSET)) {
       throw NamedError('LedgerMultiAssetNotSupported', {
@@ -211,7 +225,7 @@ const ShelleyLedgerCryptoProvider = async ({
     return Object.entries(tokenObject).map(([policyId, assets]) => {
       const tokens = assets.map(({assetName, quantity}) => ({
         assetNameHex: assetName,
-        amountStr: quantity.toString(),
+        amount: quantity.toString(),
       }))
       return {
         policyIdHex: policyId,
@@ -220,66 +234,143 @@ const ShelleyLedgerCryptoProvider = async ({
     })
   }
 
-  function prepareOutput(output: TxOutput): LedgerOutput {
+  function prepareOutput(output: TxOutput): LedgerTxOutput {
     const tokenBundle = prepareTokenBundle(output.tokenBundle)
     return output.isChange === false
       ? {
-        amountStr: `${output.coins}`,
-        addressHex: isShelleyFormat(output.address)
-          ? bechAddressToHex(output.address)
-          : base58AddressToHex(output.address),
+        destination: {
+          type: LedgerTxOutputDestinationType.THIRD_PARTY,
+          params: {
+            addressHex: isShelleyFormat(output.address)
+              ? bechAddressToHex(output.address)
+              : base58AddressToHex(output.address),
+          },
+        },
+        amount: `${output.coins}`,
         tokenBundle,
       }
       : {
-        amountStr: `${output.coins}`,
+        destination: {
+          type: LedgerTxOutputDestinationType.DEVICE_OWNED,
+          params: {
+            type: AddressType.BASE,
+            params: {
+              spendingPath: output.spendingPath,
+              stakingPath: output.stakingPath,
+            },
+          },
+        },
+        amount: `${output.coins}`,
         tokenBundle,
-        addressTypeNibble: AddressTypeNibbles.BASE,
-        spendingPath: output.spendingPath,
-        stakingPath: output.stakingPath,
       }
   }
 
   function prepareStakingKeyRegistrationCertificate(
-    certificate: TxStakingKeyRegistrationCert | TxStakingKeyDeregistrationCert,
+    certificate: TxStakingKeyRegistrationCert,
     path: BIP32Path
-  ): LedgerCertificate {
+  ): LedgerTxCertificate {
     return {
-      type: certificate.type,
-      path,
+      type: LedgerCertificateType.STAKE_REGISTRATION,
+      params: {path},
+    }
+  }
+
+  function prepareStakingKeyDeregistrationCertificate(
+    certificate: TxStakingKeyDeregistrationCert,
+    path: BIP32Path
+  ): LedgerTxCertificate {
+    return {
+      type: LedgerCertificateType.STAKE_DEREGISTRATION,
+      params: {path},
     }
   }
 
   function prepareDelegationCertificate(
     certificate: TxDelegationCert,
     path: BIP32Path
-  ): LedgerCertificate {
+  ): LedgerTxCertificate {
     return {
-      type: certificate.type,
-      poolKeyHashHex: certificate.poolHash,
-      path,
+      type: LedgerCertificateType.STAKE_DELEGATION,
+      params: {
+        poolKeyHashHex: certificate.poolHash,
+        path,
+      },
     }
+  }
+
+  function prepareRelays(relays: TxStakepoolRelay[]): LedgerRelay[] {
+    return relays.map((relay) => {
+      switch (relay.type) {
+        case TxRelayType.SINGLE_HOST_IP:
+          return {
+            type: LedgerRelayType.SINGLE_HOST_IP_ADDR,
+            params: relay.params,
+          }
+        case TxRelayType.SINGLE_HOST_NAME:
+          return {
+            type: LedgerRelayType.SINGLE_HOST_HOSTNAME,
+            params: relay.params,
+          }
+        case TxRelayType.MULTI_HOST_NAME:
+          return {
+            type: LedgerRelayType.MULTI_HOST,
+            params: relay.params,
+          }
+        default:
+          throw Error('Invalid relay type')
+      }
+    })
+  }
+
+  function preparePoolOwners(
+    certificate: TxStakepoolRegistrationCert,
+    path: BIP32Path
+  ): LedgerPoolOwner[] {
+    const {data} = bech32.decode(certificate.stakingAddress)
+    const poolOwners: LedgerPoolOwner[] = certificate.poolRegistrationParams.poolOwners.map(
+      (owner) => {
+        return !Buffer.compare(Buffer.from(owner.stakingKeyHashHex, 'hex'), data.slice(1))
+          ? {
+            type: LedgerPoolOwnerType.DEVICE_OWNED,
+            params: {stakingPath: path},
+          }
+          : {
+            type: LedgerPoolOwnerType.THIRD_PARTY,
+            params: {stakingKeyHashHex: owner.stakingKeyHashHex},
+          }
+      }
+    )
+    if (!poolOwners.some((owner) => owner.type === LedgerPoolOwnerType.DEVICE_OWNED)) {
+      throw NamedError('MissingOwner', {
+        message: 'This HW device is not an owner of the pool stated in registration certificate.',
+      })
+    }
+    return poolOwners
   }
 
   function prepareStakepoolRegistrationCertificate(
     certificate: TxStakepoolRegistrationCert,
     path: BIP32Path
-  ): LedgerCertificate {
-    const {data} = bech32.decode(certificate.stakingAddress)
-    const poolOwners = certificate.poolRegistrationParams.poolOwners.map((owner) => {
-      return !Buffer.compare(Buffer.from(owner.stakingKeyHashHex, 'hex'), data.slice(1))
-        ? {stakingPath: path}
-        : {...owner}
-    })
-    if (!poolOwners.some((owner) => owner.stakingPath)) {
-      throw NamedError('MissingOwner', {
-        message: 'This HW device is not an owner of the pool stated in registration certificate.',
-      })
+  ): LedgerTxCertificate {
+    const poolOwners = preparePoolOwners(certificate, path)
+    const margin = {
+      numerator: certificate.poolRegistrationParams.margin.numeratorStr,
+      denominator: certificate.poolRegistrationParams.margin.denominatorStr,
     }
+    const relays = prepareRelays(certificate.poolRegistrationParams.relays)
     return {
-      type: certificate.type,
-      poolRegistrationParams: {
+      type: LedgerCertificateType.STAKE_POOL_REGISTRATION,
+      params: {
         ...certificate.poolRegistrationParams,
         poolOwners,
+        margin,
+        pledge: certificate.poolRegistrationParams.pledgeStr,
+        cost: certificate.poolRegistrationParams.costStr,
+        relays,
+        metadata: {
+          metadataUrl: certificate.poolRegistrationParams.metadata.metadataUrl,
+          metadataHashHex: certificate.poolRegistrationParams.metadata.metadataHashHex,
+        },
       },
     }
   }
@@ -287,13 +378,13 @@ const ShelleyLedgerCryptoProvider = async ({
   function prepareCertificate(
     certificate: TxCertificate,
     addressToAbsPathMapper: AddressToPathMapper
-  ): LedgerCertificate {
+  ): LedgerTxCertificate {
     const path = addressToAbsPathMapper(certificate.stakingAddress)
     switch (certificate.type) {
       case CertificateType.STAKING_KEY_REGISTRATION:
         return prepareStakingKeyRegistrationCertificate(certificate, path)
       case CertificateType.STAKING_KEY_DEREGISTRATION:
-        return prepareStakingKeyRegistrationCertificate(certificate, path)
+        return prepareStakingKeyDeregistrationCertificate(certificate, path)
       case CertificateType.DELEGATION:
         return prepareDelegationCertificate(certificate, path)
       case CertificateType.STAKEPOOL_REGISTRATION:
@@ -306,10 +397,10 @@ const ShelleyLedgerCryptoProvider = async ({
   function prepareWithdrawal(
     withdrawal: TxWithdrawal,
     addressToAbsPathMapper: AddressToPathMapper
-  ): LedgerWithdrawal {
+  ): LedgerTxWithdrawal {
     return {
       path: addressToAbsPathMapper(withdrawal.stakingAddress),
-      amountStr: `${withdrawal.rewards}`,
+      amount: `${withdrawal.rewards}`,
     }
   }
 
@@ -371,18 +462,17 @@ const ShelleyLedgerCryptoProvider = async ({
       ? `${txAux.validityIntervalStart}`
       : null
 
-    const response: LedgerSignTransactionResponse = await ledger.signTransaction(
-      network.networkId,
-      network.protocolMagic,
+    const response: LedgerSignTransactionResponse = await ledger.signTransaction({
+      network: {networkId: network.networkId, protocolMagic: network.protocolMagic},
       inputs,
       outputs,
-      feeStr,
-      ttlStr,
+      fee: feeStr,
+      ttl: ttlStr,
       certificates,
       withdrawals,
-      null,
-      validityIntervalStart
-    )
+      metadata: null,
+      validityIntervalStart,
+    })
 
     if (response.txHashHex !== txAux.getId()) {
       throw NamedError('TxSerializationError', {
