@@ -1,6 +1,6 @@
 import LedgerTransportU2F from '@ledgerhq/hw-transport-u2f'
 import LedgerTransportWebusb from '@ledgerhq/hw-transport-webusb'
-import Ledger, {
+import Ledger3, {
   AddressType,
   TxOutput as LedgerTxOutput,
   TxInput as LedgerTxInput,
@@ -17,6 +17,10 @@ import Ledger, {
   Witness as LedgerWitness,
   SignTransactionResponse as LedgerSignTransactionResponse,
 } from '@cardano-foundation/ledgerjs-hw-app-cardano'
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line no-duplicate-imports
+import Ledger, * as LedgerTypes from '@cardano-foundation/ledgerjs-hw-app-cardano'
 import * as cbor from 'borc'
 import CachedDeriveXpubFactory from '../helpers/CachedDeriveXpubFactory'
 import debugLog from '../../helpers/debugLog'
@@ -121,7 +125,7 @@ const ShelleyLedgerCryptoProvider = async ({
   const ledger = new Ledger(transport)
   const derivationScheme = derivationSchemes.v2
 
-  const version = (await ledger.getVersion()).version
+  const {version} = await ledger.getVersion()
 
   const getVersion = (): string => `${version.major}.${version.minor}.${version.patch}`
 
@@ -213,7 +217,7 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
-  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerTxAssetGroup[] => {
+  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerTypes.AssetGroup[] => {
     // TODO: refactor, we should check the whole tx againt the version beforehand
     if (tokenBundle.length > 0 && !isFeatureSupported(CryptoProviderFeature.MULTI_ASSET)) {
       throw NamedError('LedgerMultiAssetNotSupported', {
@@ -462,7 +466,7 @@ const ShelleyLedgerCryptoProvider = async ({
       ? `${txAux.validityIntervalStart}`
       : null
 
-    const response: LedgerSignTransactionResponse = await ledger.signTransaction({
+    const response = await ledger.signTransaction({
       network: {networkId: network.networkId, protocolMagic: network.protocolMagic},
       inputs,
       outputs,
