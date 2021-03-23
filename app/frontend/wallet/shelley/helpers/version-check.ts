@@ -4,7 +4,8 @@ interface Version {
   patch: string
 }
 
-export const hasRequiredVersion = (currentVersionStr: Version, requiredVersionStr) => {
+// TODO: type version
+export const hasRequiredVersion = (currentVersionStr: any, requiredVersionStr) => {
   const current = {
     major: parseInt(currentVersionStr.major, 10),
     minor: parseInt(currentVersionStr.minor, 10),
