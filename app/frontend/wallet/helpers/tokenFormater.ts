@@ -35,9 +35,11 @@ export const aggregateTokenBundles = (tokenBundle: TokenBundle[]): TokenBundle =
 
 export const groupTokenBundleByPolicyId = (
   tokenBundle: TokenBundle
-): {[policyId: string]: TokenBundle} => {
+): {[policyId: string]: Omit<Token, 'policyId'>[]} => {
   return _(tokenBundle)
+    .orderBy(['policyId', 'assetName'], ['asc', 'asc'])
     .groupBy(({policyId}) => policyId)
+    .mapValues((tokens) => tokens.map(({assetName, quantity}) => ({assetName, quantity})))
     .value()
 }
 

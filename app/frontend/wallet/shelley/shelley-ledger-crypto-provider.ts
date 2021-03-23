@@ -351,10 +351,12 @@ const ShelleyLedgerCryptoProvider = async ({
         pledge: certificate.poolRegistrationParams.pledgeStr,
         cost: certificate.poolRegistrationParams.costStr,
         relays,
-        metadata: {
-          metadataUrl: certificate.poolRegistrationParams.metadata.metadataUrl,
-          metadataHashHex: certificate.poolRegistrationParams.metadata.metadataHashHex,
-        },
+        metadata: certificate.poolRegistrationParams.metadata
+          ? {
+            metadataUrl: certificate.poolRegistrationParams.metadata.metadataUrl,
+            metadataHashHex: certificate.poolRegistrationParams.metadata.metadataHashHex,
+          }
+          : null,
       },
     }
   }
