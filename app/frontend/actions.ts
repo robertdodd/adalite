@@ -538,10 +538,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: validationError,
-        options: {
-          shouldShowTransactionErrorModal: true,
-        },
       })
+      setState({shouldShowTransactionErrorModal: true})
     }
     stopLoadingAction(state)
   }
@@ -552,10 +550,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: supportError,
-        options: {
-          shouldShowTransactionErrorModal: true,
-        },
       })
+      setState({shouldShowTransactionErrorModal: true})
       return
     }
     loadingAction(state, 'Preparing transaction...')
@@ -581,10 +577,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: withdrawalValidationError,
-        options: {
-          shouldShowTransactionErrorModal: true,
-        },
       })
+      setState({shouldShowTransactionErrorModal: true})
     }
     stopLoadingAction(state)
   }
@@ -672,10 +666,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'delegationValidationError',
         error: validationError,
-        options: {
-          calculatingDelegationFee: false,
-        },
       })
+      setState({calculatingDelegationFee: false})
     }
   }
 
@@ -952,9 +944,6 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: e,
-        options: {
-          txHash: txSubmitResult && txSubmitResult.txHash,
-        },
       })
       setState({
         shouldShowTransactionErrorModal: true,
@@ -1193,10 +1182,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: supportError,
-        options: {
-          shouldShowTransactionErrorModal: true,
-        },
       })
+      setState({shouldShowTransactionErrorModal: true})
       return
     }
 
@@ -1230,10 +1217,8 @@ export default (store: Store) => {
       setError(state, {
         errorName: 'transactionSubmissionError',
         error: withdrawalValidationError,
-        options: {
-          shouldShowTransactionErrorModal: true,
-        },
       })
+      setState({shouldShowTransactionErrorModal: true})
     }
     stopLoadingAction(state)
   }

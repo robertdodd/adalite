@@ -4,12 +4,7 @@ import {Store, State} from '../state'
 
 export default ({setState}: Store) => {
   return {
-    // TODO: remove "options", as "setError" should not be responsible for setting other
-    // parts of the state
-    setError: (
-      state: State,
-      {errorName, error, options}: {errorName: string; error: any; options?: any}
-    ) => {
+    setError: (state: State, {errorName, error}: {errorName: string; error: any}) => {
       if (error && error.name) {
         debugLog(error)
         captureBySentry(error)
@@ -21,12 +16,10 @@ export default ({setState}: Store) => {
             },
           },
           error,
-          ...options,
         })
       } else {
         setState({
           [errorName]: error,
-          ...options,
         })
       }
     },
