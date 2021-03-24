@@ -67,9 +67,8 @@ export default (store: Store) => {
         shouldExportPubKeyBulk: boolean
       }
     ) => {
-      loadingAction(state, 'Loading wallet data...', {
-        walletLoadingError: undefined,
-      })
+      loadingAction(state, 'Loading wallet data...')
+      setState({walletLoadingError: undefined})
       const isShelleyCompatible = !(
         walletSecretDef && walletSecretDef.derivationScheme.type === 'v1'
       )

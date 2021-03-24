@@ -183,7 +183,7 @@ export default (store: Store) => {
     } catch (e) {
       throw NamedError('TransactionCorrupted', {causedBy: e})
     } finally {
-      stopLoadingAction(state, {})
+      stopLoadingAction(state)
     }
 
     // TODO: implement tx differenciation here and drop the txConfirmType
@@ -543,7 +543,7 @@ export default (store: Store) => {
         },
       })
     }
-    stopLoadingAction(state, {})
+    stopLoadingAction(state)
   }
 
   const withdrawRewards = async (state: State): Promise<void> => {
@@ -586,7 +586,7 @@ export default (store: Store) => {
         },
       })
     }
-    stopLoadingAction(state, {})
+    stopLoadingAction(state)
   }
 
   /* DELEGATE */
@@ -781,7 +781,7 @@ export default (store: Store) => {
         shouldShowWalletLoadingErrorModal: true,
       })
     } finally {
-      stopLoadingAction(state, {})
+      stopLoadingAction(state)
     }
   }
 
@@ -1089,9 +1089,8 @@ export default (store: Store) => {
 
   const loadPoolCertificateTx = async (state: State, fileContentStr: string) => {
     try {
-      loadingAction(state, 'Loading pool registration certificate...', {
-        poolRegTxError: undefined,
-      })
+      loadingAction(state, 'Loading pool registration certificate...')
+      setState({poolRegTxError: undefined})
       const {txBodyType, unsignedTxParsed, ttl, validityIntervalStart} = parseCliUnsignedTx(
         fileContentStr
       )
@@ -1115,7 +1114,7 @@ export default (store: Store) => {
         error: {name: 'PoolRegTxParserError', message: err.message},
       })
     } finally {
-      stopLoadingAction(state, {})
+      stopLoadingAction(state)
     }
   }
 
@@ -1184,7 +1183,7 @@ export default (store: Store) => {
       resetPoolRegTransactionSummary(state)
       setError(state, {errorName: 'poolRegTxError', error: e})
     } finally {
-      stopLoadingAction(state, {})
+      stopLoadingAction(state)
     }
   }
 
@@ -1236,7 +1235,7 @@ export default (store: Store) => {
         },
       })
     }
-    stopLoadingAction(state, {})
+    stopLoadingAction(state)
   }
 
   return {
