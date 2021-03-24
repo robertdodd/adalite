@@ -20,8 +20,7 @@ import {exportWalletSecretDef} from './wallet/keypass-json'
 import mnemonicToWalletSecretDef from './wallet/helpers/mnemonicToWalletSecretDef'
 import sanitizeMnemonic from './helpers/sanitizeMnemonic'
 import {initialState} from './store'
-import captureBySentry from './helpers/captureBySentry'
-import {State, GetStateFn, SetStateFn, getSourceAccountInfo} from './state'
+import {State, getSourceAccountInfo, Store} from './state'
 import ShelleyCryptoProviderFactory from './wallet/shelley/shelley-crypto-provider-factory'
 import {ShelleyWallet} from './wallet/shelley-wallet'
 import {TxPlan, TxPlanResult} from './wallet/shelley/shelley-transaction-planner'
@@ -45,6 +44,7 @@ import {
 } from './types'
 import {MainTabs} from './constants'
 import {parseCliUnsignedTx} from './wallet/shelley/helpers/stakepoolRegistrationUtils'
+import errorActions from './actions/error'
 
 let wallet: ReturnType<typeof ShelleyWallet>
 
@@ -59,7 +59,10 @@ const debounceEvent = (callback, time) => {
   }
 }
 
-export default ({setState, getState}: {setState: SetStateFn; getState: GetStateFn}) => {
+export default (store: Store) => {
+  const {setError} = errorActions(store)
+  const {setState, getState} = store
+
   const loadingAction = (state, message: string, optionalArgsObj?: any) => {
     return setState(
       Object.assign(
@@ -84,27 +87,6 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         optionalArgsObj
       )
     )
-  }
-  const setErrorState = (errorName: string, e: any, options?: any) => {
-    if (e && e.name) {
-      debugLog(e)
-      captureBySentry(e)
-      setState({
-        [errorName]: {
-          code: e.name,
-          params: {
-            message: e.message,
-          },
-        },
-        error: e,
-        ...options,
-      })
-    } else {
-      setState({
-        [errorName]: e,
-        ...options,
-      })
-    }
   }
 
   const setAuthMethod = (state: State, option: AuthMethodType): void => {
@@ -226,7 +208,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       setState({
         loading: false,
       })
-      setErrorState('walletLoadingError', e)
+      setError(state, {errorName: 'walletLoadingError', error: e})
       setState({
         shouldShowWalletLoadingErrorModal: true,
       })
@@ -252,7 +234,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       setState({
         loading: false,
       })
-      setErrorState('walletLoadingError', e)
+      setError(state, {errorName: 'walletLoadingError', error: e})
       setState({
         shouldShowWalletLoadingErrorModal: true,
       })
@@ -379,7 +361,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         setState({
           waitingForHwWallet: false,
         })
-        setErrorState('addressVerificationError', true)
+        setError(state, {errorName: 'addressVerificationError', error: true})
       }
     }
   }
@@ -515,14 +497,20 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
   }
 
   const validateSendForm = (state: State) => {
-    setErrorState('sendAddressValidationError', sendAddressValidator(state.sendAddress.fieldValue))
+    setError(state, {
+      errorName: 'sendAddressValidationError',
+      error: sendAddressValidator(state.sendAddress.fieldValue),
+    })
     if (state.sendAmount.assetFamily === AssetFamily.ADA) {
       const sendAmountValidationError = sendAmountValidator(
         state.sendAmount.fieldValue,
         state.sendAmount.coins,
         getSourceAccountInfo(state).balance as Lovelace
       )
-      setErrorState('sendAmountValidationError', sendAmountValidationError)
+      setError(state, {
+        errorName: 'sendAmountValidationError',
+        error: sendAmountValidationError,
+      })
     }
     if (state.sendAmount.assetFamily === AssetFamily.TOKEN) {
       const {policyId, assetName, quantity} = state.sendAmount.token
@@ -535,7 +523,10 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         quantity,
         tokenBalance
       )
-      setErrorState('sendAmountValidationError', sendAmountValidationError)
+      setError(state, {
+        errorName: 'sendAmountValidationError',
+        error: sendAmountValidationError,
+      })
     }
   }
 
@@ -635,7 +626,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
           balance,
           txPlanResult.estimatedFee
         ) || txPlanResult.error
-      setErrorState('sendAmountValidationError', validationError)
+      setError(state, {errorName: 'sendAmountValidationError', error: validationError})
       setState({
         calculatingFee: false,
         txSuccessTab: '',
@@ -706,7 +697,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       setState({
         calculatingFee: false,
       })
-      setErrorState('sendAmountValidationError', {code: e.name})
+      setError(state, {errorName: 'sendAmountValidationError', error: {code: e.name}})
       return
     }
   }
@@ -744,8 +735,12 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       const validationError =
         txPlanValidator(coins, 0 as Lovelace, balance, txPlanResult.estimatedFee) ||
         txPlanResult.error
-      setErrorState('transactionSubmissionError', validationError, {
-        shouldShowTransactionErrorModal: true,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: validationError,
+        options: {
+          shouldShowTransactionErrorModal: true,
+        },
       })
     }
     stopLoadingAction(state, {})
@@ -754,8 +749,12 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
   const withdrawRewards = async (state: State): Promise<void> => {
     const supportError = wallet.ensureFeatureIsSupported(CryptoProviderFeature.WITHDRAWAL)
     if (supportError) {
-      setErrorState('transactionSubmissionError', supportError, {
-        shouldShowTransactionErrorModal: true,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: supportError,
+        options: {
+          shouldShowTransactionErrorModal: true,
+        },
       })
       return
     }
@@ -779,8 +778,12 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         withdrawalPlanValidator(rewards, balance, txPlanResult.estimatedFee) ||
         wallet.ensureFeatureIsSupported(CryptoProviderFeature.WITHDRAWAL) ||
         txPlanResult.error
-      setErrorState('transactionSubmissionError', withdrawalValidationError, {
-        shouldShowTransactionErrorModal: true,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: withdrawalValidationError,
+        options: {
+          shouldShowTransactionErrorModal: true,
+        },
       })
     }
     stopLoadingAction(state, {})
@@ -866,8 +869,12 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       const validationError =
         delegationPlanValidator(balance, 0 as Lovelace, txPlanResult.estimatedFee) ||
         txPlanResult.error
-      setErrorState('delegationValidationError', validationError, {
-        calculatingDelegationFee: false,
+      setError(state, {
+        errorName: 'delegationValidationError',
+        error: validationError,
+        options: {
+          calculatingDelegationFee: false,
+        },
       })
     }
   }
@@ -879,7 +886,10 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
     const selectedPool = state.shelleyDelegation.selectedPool
     const delegationValidationError = selectedPool.validationError
 
-    setErrorState('delegationValidationError', delegationValidationError)
+    setError(state, {
+      errorName: 'delegationValidationError',
+      error: delegationValidationError,
+    })
     setState({
       delegationValidationError,
     })
@@ -966,7 +976,7 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       })
       setActiveAccount(state, nextAccount.accountIndex)
     } catch (e) {
-      setErrorState('walletLoadingError', e)
+      setError(state, {errorName: 'walletLoadingError', error: e})
       setState({
         shouldShowWalletLoadingErrorModal: true,
       })
@@ -1129,8 +1139,12 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         setState({shouldShowThanksForDonation: true})
       }
     } catch (e) {
-      setErrorState('transactionSubmissionError', e, {
-        txHash: txSubmitResult && txSubmitResult.txHash,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: e,
+        options: {
+          txHash: txSubmitResult && txSubmitResult.txHash,
+        },
       })
       setState({
         shouldShowTransactionErrorModal: true,
@@ -1284,7 +1298,10 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
       })
     } catch (err) {
       debugLog(`Certificate file parsing failure: ${err}`)
-      setErrorState('poolRegTxError', {name: 'PoolRegTxParserError', message: err.message})
+      setError(state, {
+        errorName: 'poolRegTxError',
+        error: {name: 'PoolRegTxParserError', message: err.message},
+      })
     } finally {
       stopLoadingAction(state, {})
     }
@@ -1351,22 +1368,26 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
     } catch (e) {
       debugLog(`Certificate transaction file signing failure: ${e}`)
       resetPoolRegTransactionSummary(state)
-      setErrorState('poolRegTxError', e)
+      setError(state, {errorName: 'poolRegTxError', error: e})
     } finally {
       stopLoadingAction(state, {})
     }
   }
 
-  const deregisterStakingKey = async (): Promise<void> => {
+  const deregisterStakingKey = async (state: State): Promise<void> => {
     const supportError = wallet.ensureFeatureIsSupported(CryptoProviderFeature.WITHDRAWAL)
     if (supportError) {
-      setErrorState('transactionSubmissionError', supportError, {
-        shouldShowTransactionErrorModal: true,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: supportError,
+        options: {
+          shouldShowTransactionErrorModal: true,
+        },
       })
       return
     }
 
-    const state = getState()
+    state = getState()
     const sourceAccount = getSourceAccountInfo(state)
     const rewards = getSourceAccountInfo(state).shelleyBalances.rewardsAccountBalance as Lovelace
     const balance = getSourceAccountInfo(state).balance as Lovelace
@@ -1393,14 +1414,19 @@ export default ({setState, getState}: {setState: SetStateFn; getState: GetStateF
         withdrawalPlanValidator(rewards, balance, txPlanResult.estimatedFee) ||
         wallet.ensureFeatureIsSupported(CryptoProviderFeature.WITHDRAWAL) ||
         txPlanResult.error
-      setErrorState('transactionSubmissionError', withdrawalValidationError, {
-        shouldShowTransactionErrorModal: true,
+      setError(state, {
+        errorName: 'transactionSubmissionError',
+        error: withdrawalValidationError,
+        options: {
+          shouldShowTransactionErrorModal: true,
+        },
       })
     }
     stopLoadingAction(state, {})
   }
 
   return {
+    setError,
     loadingAction,
     stopLoadingAction,
     setAuthMethod,
