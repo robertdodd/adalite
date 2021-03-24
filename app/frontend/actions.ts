@@ -45,6 +45,7 @@ import {
 import {MainTabs} from './constants'
 import {parseCliUnsignedTx} from './wallet/shelley/helpers/stakepoolRegistrationUtils'
 import errorActions from './actions/error'
+import loadingActions from './actions/loading'
 
 let wallet: ReturnType<typeof ShelleyWallet>
 
@@ -61,33 +62,8 @@ const debounceEvent = (callback, time) => {
 
 export default (store: Store) => {
   const {setError} = errorActions(store)
+  const {loadingAction, stopLoadingAction} = loadingActions(store)
   const {setState, getState} = store
-
-  const loadingAction = (state, message: string, optionalArgsObj?: any) => {
-    return setState(
-      Object.assign(
-        {},
-        {
-          loading: true,
-          loadingMessage: message,
-        },
-        optionalArgsObj
-      )
-    )
-  }
-
-  const stopLoadingAction = (state, optionalArgsObj) => {
-    return setState(
-      Object.assign(
-        {},
-        {
-          loading: false,
-          loadingMessage: undefined,
-        },
-        optionalArgsObj
-      )
-    )
-  }
 
   const setAuthMethod = (state: State, option: AuthMethodType): void => {
     setState({
