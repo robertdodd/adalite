@@ -2,5 +2,6 @@
   "baseUrl": "https://localhost:3000",
   "viewportWidth": 1440,
   "viewportHeight": 900,
-  "defaultCommandTimeout": 10000
+  "defaultCommandTimeout": 10000,
+  "modifyObstructiveCode": false
 }

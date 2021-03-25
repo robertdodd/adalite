@@ -34,7 +34,7 @@
     "generate-cert": "test -e server.cert && echo \"certificate already exists\" || openssl req -nodes -new -x509 -keyout server.key -out server.cert -subj \"/C=US\"",
     "cypress:dev": "ADALITE_BLOCKCHAIN_EXPLORER_URL='https://explorer-testnet.adalite.io' ADALITE_NETWORK='MARY_TESTNET' ADALITE_ENABLE_SERVER_MOCKING_MODE=true ADALITE_MOCK_TX_SUBMISSION_SUCCESS=true ADALITE_MOCK_TX_SUMMARY_SUCCESS=true yarn run dev",
     "cypress:open": "cd app && yarn run cypress open",
-    "cypress:run": "cd app && yarn run cypress run --headless"
+    "cypress:run": "cd app && yarn run cypress run --headless --browser=chrome"
   },
   "husky": {
     "hooks": {
