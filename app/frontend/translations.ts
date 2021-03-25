@@ -60,6 +60,14 @@ const translations = {
     }
     return `TransportStatusError: ${message}. ${errors[message] || ''}`
   },
+  DeviceStatusError: ({message}) => {
+    const errors = {
+      'Ledger device: Wrong Ledger app':
+        'Please make sure that the Cardano Ledger App is opened before initiating the connection.',
+      'Ledger device: Device is locked': 'Please unlock your device.',
+    }
+    return `DeviceStatusError: ${message}. ${errors[message] || ''}`
+  },
   TransportInterfaceNotAvailable: ({message}) => {
     const errors = {
       'Unable to claim interface.':

@@ -1,6 +1,6 @@
 import LedgerTransportU2F from '@ledgerhq/hw-transport-u2f'
 import LedgerTransportWebusb from '@ledgerhq/hw-transport-webusb'
-import Ledger, {AddressTypeNibbles} from '@cardano-foundation/ledgerjs-hw-app-cardano'
+import Ledger, * as LedgerTypes from '@cardano-foundation/ledgerjs-hw-app-cardano'
 import * as cbor from 'borc'
 import CachedDeriveXpubFactory from '../helpers/CachedDeriveXpubFactory'
 import debugLog from '../../helpers/debugLog'
@@ -34,6 +34,7 @@ import {
   AddressToPathMapper,
   CertificateType,
   TokenBundle,
+  Address,
 } from '../../types'
 import {
   Network,
@@ -48,18 +49,9 @@ import {
   TxStakingKeyRegistrationCert,
   TxWithdrawal,
 } from '../types'
-import {
-  LedgerAssetGroup,
-  LedgerCertificate,
-  LedgerGetExtendedPublicKeyResponse,
-  LedgerInput,
-  LedgerOutput,
-  LedgerSignTransactionResponse,
-  LedgerWithdrawal,
-  LedgerWitness,
-} from './ledger-types'
 import {TxSigned, TxAux, CborizedCliWitness} from './types'
 import {groupTokenBundleByPolicyId} from '../helpers/tokenFormater'
+import {TxRelayType, TxStakepoolOwner, TxStakepoolRelay} from './helpers/poolCertificateUtils'
 
 const isWebUsbSupported = async () => {
   const isSupported = await LedgerTransportWebusb.isSupported()
@@ -114,7 +106,7 @@ const ShelleyLedgerCryptoProvider = async ({
   const ledger = new Ledger(transport)
   const derivationScheme = derivationSchemes.v2
 
-  const version = await ledger.getVersion()
+  const {version} = await ledger.getVersion()
 
   const getVersion = (): string => `${version.major}.${version.minor}.${version.patch}`
 
@@ -125,13 +117,13 @@ const ShelleyLedgerCryptoProvider = async ({
 
   const exportPublicKeys = async (
     derivationPaths: BIP32Path[]
-  ): Promise<LedgerGetExtendedPublicKeyResponse[]> => {
+  ): Promise<LedgerTypes.GetExtendedPublicKeyResponse[]> => {
     if (isFeatureSupported(CryptoProviderFeature.BULK_EXPORT)) {
-      return await ledger.getExtendedPublicKeys(derivationPaths)
+      return await ledger.getExtendedPublicKeys({paths: derivationPaths})
     }
-    const response: LedgerGetExtendedPublicKeyResponse[] = []
+    const response: LedgerTypes.GetExtendedPublicKeyResponse[] = []
     for (const path of derivationPaths) {
-      response.push(await ledger.getExtendedPublicKey(path))
+      response.push(await ledger.getExtendedPublicKey({path}))
     }
     return response
   }
@@ -172,12 +164,16 @@ const ShelleyLedgerCryptoProvider = async ({
     stakingPath?: BIP32Path
   ): Promise<void> {
     try {
-      await ledger.showAddress(
-        AddressTypeNibbles.BASE, // TODO: retrieve from the address
-        network.networkId,
-        absDerivationPath,
-        stakingPath
-      )
+      await ledger.showAddress({
+        network: {networkId: network.networkId, protocolMagic: network.protocolMagic},
+        address: {
+          type: LedgerTypes.AddressType.BASE,
+          params: {
+            spendingPath: absDerivationPath,
+            stakingPath,
+          },
+        },
+      })
     } catch (err) {
       throw NamedError('LedgerOperationError', {message: `${err.name}: ${err.message}`})
     }
@@ -191,7 +187,10 @@ const ShelleyLedgerCryptoProvider = async ({
     return derivationScheme
   }
 
-  function prepareInput(input: TxInput, addressToAbsPathMapper: AddressToPathMapper): LedgerInput {
+  function prepareInput(
+    input: TxInput,
+    addressToAbsPathMapper: AddressToPathMapper
+  ): LedgerTypes.TxInput {
     return {
       txHashHex: input.txHash,
       outputIndex: input.outputIndex,
@@ -199,7 +198,7 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
-  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerAssetGroup[] => {
+  const prepareTokenBundle = (tokenBundle: TokenBundle): LedgerTypes.AssetGroup[] => {
     // TODO: refactor, we should check the whole tx againt the version beforehand
     if (tokenBundle.length > 0 && !isFeatureSupported(CryptoProviderFeature.MULTI_ASSET)) {
       throw NamedError('LedgerMultiAssetNotSupported', {
@@ -211,7 +210,7 @@ const ShelleyLedgerCryptoProvider = async ({
     return Object.entries(tokenObject).map(([policyId, assets]) => {
       const tokens = assets.map(({assetName, quantity}) => ({
         assetNameHex: assetName,
-        amountStr: quantity.toString(),
+        amount: quantity.toString(),
       }))
       return {
         policyIdHex: policyId,
@@ -220,66 +219,150 @@ const ShelleyLedgerCryptoProvider = async ({
     })
   }
 
-  function prepareOutput(output: TxOutput): LedgerOutput {
+  function prepareOutput(output: TxOutput): LedgerTypes.TxOutput {
     const tokenBundle = prepareTokenBundle(output.tokenBundle)
     return output.isChange === false
       ? {
-        amountStr: `${output.coins}`,
-        addressHex: isShelleyFormat(output.address)
-          ? bechAddressToHex(output.address)
-          : base58AddressToHex(output.address),
+        destination: {
+          type: LedgerTypes.TxOutputDestinationType.THIRD_PARTY,
+          params: {
+            addressHex: isShelleyFormat(output.address)
+              ? bechAddressToHex(output.address)
+              : base58AddressToHex(output.address),
+          },
+        },
+        amount: `${output.coins}`,
         tokenBundle,
       }
       : {
-        amountStr: `${output.coins}`,
+        destination: {
+          type: LedgerTypes.TxOutputDestinationType.DEVICE_OWNED,
+          params: {
+            type: LedgerTypes.AddressType.BASE,
+            params: {
+              spendingPath: output.spendingPath,
+              stakingPath: output.stakingPath,
+            },
+          },
+        },
+        amount: `${output.coins}`,
         tokenBundle,
-        addressTypeNibble: AddressTypeNibbles.BASE,
-        spendingPath: output.spendingPath,
-        stakingPath: output.stakingPath,
       }
   }
 
   function prepareStakingKeyRegistrationCertificate(
-    certificate: TxStakingKeyRegistrationCert | TxStakingKeyDeregistrationCert,
+    certificate: TxStakingKeyRegistrationCert,
     path: BIP32Path
-  ): LedgerCertificate {
+  ): LedgerTypes.Certificate {
     return {
-      type: certificate.type,
-      path,
+      type: LedgerTypes.CertificateType.STAKE_REGISTRATION,
+      params: {path},
+    }
+  }
+
+  function prepareStakingKeyDeregistrationCertificate(
+    certificate: TxStakingKeyDeregistrationCert,
+    path: BIP32Path
+  ): LedgerTypes.Certificate {
+    return {
+      type: LedgerTypes.CertificateType.STAKE_DEREGISTRATION,
+      params: {path},
     }
   }
 
   function prepareDelegationCertificate(
     certificate: TxDelegationCert,
     path: BIP32Path
-  ): LedgerCertificate {
+  ): LedgerTypes.Certificate {
     return {
-      type: certificate.type,
-      poolKeyHashHex: certificate.poolHash,
-      path,
+      type: LedgerTypes.CertificateType.STAKE_DELEGATION,
+      params: {
+        poolKeyHashHex: certificate.poolHash,
+        path,
+      },
     }
+  }
+
+  function prepareRelays(relays: TxStakepoolRelay[]): LedgerTypes.Relay[] {
+    return relays.map((relay) => {
+      switch (relay.type) {
+        case TxRelayType.SINGLE_HOST_IP:
+          return {
+            type: LedgerTypes.RelayType.SINGLE_HOST_IP_ADDR,
+            params: relay.params,
+          }
+        case TxRelayType.SINGLE_HOST_NAME:
+          return {
+            type: LedgerTypes.RelayType.SINGLE_HOST_HOSTNAME,
+            params: relay.params,
+          }
+        case TxRelayType.MULTI_HOST_NAME:
+          return {
+            type: LedgerTypes.RelayType.MULTI_HOST,
+            params: relay.params,
+          }
+        default:
+          throw NamedError('InvalidRelayType')
+      }
+    })
+  }
+
+  function preparePoolOwners(
+    stakepoolOwners: TxStakepoolOwner[],
+    stakingAddress: Address,
+    path: BIP32Path
+  ): LedgerTypes.PoolOwner[] {
+    const {data: stakingAddressBuff} = bech32.decode(stakingAddress)
+    const poolOwners: LedgerTypes.PoolOwner[] = stakepoolOwners.map((owner) => {
+      // TODO: helper function for slicing first bit from staking address so its stakingKeyHash
+      return !Buffer.compare(
+        Buffer.from(owner.stakingKeyHashHex, 'hex'),
+        stakingAddressBuff.slice(1)
+      )
+        ? {
+          type: LedgerTypes.PoolOwnerType.DEVICE_OWNED,
+          params: {stakingPath: path},
+        }
+        : {
+          type: LedgerTypes.PoolOwnerType.THIRD_PARTY,
+          params: {stakingKeyHashHex: owner.stakingKeyHashHex},
+        }
+    })
+    if (!poolOwners.some((owner) => owner.type === LedgerTypes.PoolOwnerType.DEVICE_OWNED)) {
+      throw NamedError('MissingOwner', {
+        message: 'This HW device is not an owner of the pool stated in registration certificate.',
+      })
+    }
+    return poolOwners
   }
 
   function prepareStakepoolRegistrationCertificate(
     certificate: TxStakepoolRegistrationCert,
     path: BIP32Path
-  ): LedgerCertificate {
-    const {data} = bech32.decode(certificate.stakingAddress)
-    const poolOwners = certificate.poolRegistrationParams.poolOwners.map((owner) => {
-      return !Buffer.compare(Buffer.from(owner.stakingKeyHashHex, 'hex'), data.slice(1))
-        ? {stakingPath: path}
-        : {...owner}
-    })
-    if (!poolOwners.some((owner) => owner.stakingPath)) {
-      throw NamedError('MissingOwner', {
-        message: 'This HW device is not an owner of the pool stated in registration certificate.',
-      })
+  ): LedgerTypes.Certificate {
+    const {stakingAddress, poolRegistrationParams} = certificate
+    const poolOwners = preparePoolOwners(poolRegistrationParams.poolOwners, stakingAddress, path)
+    const margin = {
+      numerator: poolRegistrationParams.margin.numeratorStr,
+      denominator: poolRegistrationParams.margin.denominatorStr,
     }
+    const metadata = poolRegistrationParams.metadata
+      ? {
+        metadataUrl: poolRegistrationParams.metadata.metadataUrl,
+        metadataHashHex: poolRegistrationParams.metadata.metadataHashHex,
+      }
+      : null
+    const relays = prepareRelays(poolRegistrationParams.relays)
     return {
-      type: certificate.type,
-      poolRegistrationParams: {
-        ...certificate.poolRegistrationParams,
+      type: LedgerTypes.CertificateType.STAKE_POOL_REGISTRATION,
+      params: {
+        ...poolRegistrationParams,
         poolOwners,
+        margin,
+        pledge: poolRegistrationParams.pledgeStr,
+        cost: poolRegistrationParams.costStr,
+        relays,
+        metadata,
       },
     }
   }
@@ -287,13 +370,13 @@ const ShelleyLedgerCryptoProvider = async ({
   function prepareCertificate(
     certificate: TxCertificate,
     addressToAbsPathMapper: AddressToPathMapper
-  ): LedgerCertificate {
+  ): LedgerTypes.Certificate {
     const path = addressToAbsPathMapper(certificate.stakingAddress)
     switch (certificate.type) {
       case CertificateType.STAKING_KEY_REGISTRATION:
         return prepareStakingKeyRegistrationCertificate(certificate, path)
       case CertificateType.STAKING_KEY_DEREGISTRATION:
-        return prepareStakingKeyRegistrationCertificate(certificate, path)
+        return prepareStakingKeyDeregistrationCertificate(certificate, path)
       case CertificateType.DELEGATION:
         return prepareDelegationCertificate(certificate, path)
       case CertificateType.STAKEPOOL_REGISTRATION:
@@ -306,14 +389,14 @@ const ShelleyLedgerCryptoProvider = async ({
   function prepareWithdrawal(
     withdrawal: TxWithdrawal,
     addressToAbsPathMapper: AddressToPathMapper
-  ): LedgerWithdrawal {
+  ): LedgerTypes.Withdrawal {
     return {
       path: addressToAbsPathMapper(withdrawal.stakingAddress),
-      amountStr: `${withdrawal.rewards}`,
+      amount: `${withdrawal.rewards}`,
     }
   }
 
-  const prepareByronWitness = async (witness: LedgerWitness): Promise<TxByronWitness> => {
+  const prepareByronWitness = async (witness: LedgerTypes.Witness): Promise<TxByronWitness> => {
     const xpub = await deriveXpub(witness.path)
     const publicKey = xpub2pub(xpub)
     const chainCode = xpub2ChainCode(xpub)
@@ -329,7 +412,7 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
-  const prepareShelleyWitness = async (witness: LedgerWitness): Promise<TxShelleyWitness> => {
+  const prepareShelleyWitness = async (witness: LedgerTypes.Witness): Promise<TxShelleyWitness> => {
     const xpub = await deriveXpub(witness.path)
     const publicKey = xpub2pub(xpub)
     const signature = Buffer.from(witness.witnessSignatureHex, 'hex')
@@ -339,7 +422,7 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
-  const prepareWitnesses = async (ledgerWitnesses: LedgerWitness[]) => {
+  const prepareWitnesses = async (ledgerWitnesses: LedgerTypes.Witness[]) => {
     const _shelleyWitnesses = []
     const _byronWitnesses = []
     ledgerWitnesses.forEach((witness) => {
@@ -352,9 +435,10 @@ const ShelleyLedgerCryptoProvider = async ({
     return {shelleyWitnesses, byronWitnesses}
   }
 
-  async function signTx(
+  async function ledgerSignTransaction(
     txAux: TxAux,
-    addressToAbsPathMapper: AddressToPathMapper
+    addressToAbsPathMapper: AddressToPathMapper,
+    signingMode: LedgerTypes.TransactionSigningMode
   ): Promise<TxSigned> {
     const inputs = txAux.inputs.map((input) => prepareInput(input, addressToAbsPathMapper))
     const outputs = txAux.outputs.map((output) => prepareOutput(output))
@@ -371,18 +455,20 @@ const ShelleyLedgerCryptoProvider = async ({
       ? `${txAux.validityIntervalStart}`
       : null
 
-    const response: LedgerSignTransactionResponse = await ledger.signTransaction(
-      network.networkId,
-      network.protocolMagic,
-      inputs,
-      outputs,
-      feeStr,
-      ttlStr,
-      certificates,
-      withdrawals,
-      null,
-      validityIntervalStart
-    )
+    const response = await ledger.signTransaction({
+      signingMode,
+      tx: {
+        network: {networkId: network.networkId, protocolMagic: network.protocolMagic},
+        inputs,
+        outputs,
+        fee: feeStr,
+        ttl: ttlStr,
+        certificates,
+        withdrawals,
+        metadata: null,
+        validityIntervalStart,
+      },
+    })
 
     if (response.txHashHex !== txAux.getId()) {
       throw NamedError('TxSerializationError', {
@@ -401,11 +487,26 @@ const ShelleyLedgerCryptoProvider = async ({
     }
   }
 
+  async function signTx(
+    txAux: TxAux,
+    addressToAbsPathMapper: AddressToPathMapper
+  ): Promise<TxSigned> {
+    return await ledgerSignTransaction(
+      txAux,
+      addressToAbsPathMapper,
+      LedgerTypes.TransactionSigningMode.ORDINARY_TRANSACTION
+    )
+  }
+
   async function witnessPoolRegTx(
     txAux: TxAux,
     addressToAbsPathMapper: AddressToPathMapper
   ): Promise<CborizedCliWitness> {
-    const txSigned = await signTx(txAux, addressToAbsPathMapper)
+    const txSigned = await ledgerSignTransaction(
+      txAux,
+      addressToAbsPathMapper,
+      LedgerTypes.TransactionSigningMode.POOL_REGISTRATION_AS_OWNER
+    )
     return cborizeCliWitness(txSigned)
   }
 

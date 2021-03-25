@@ -9,17 +9,19 @@
   dependencies:
     regenerator-runtime "^0.13.4"
 
-"@cardano-foundation/ledgerjs-hw-app-cardano@^2.2.1":
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/@cardano-foundation/ledgerjs-hw-app-cardano/-/ledgerjs-hw-app-cardano-2.2.1.tgz#775e4f34ccfd071eaf09b7bdd0dffe175b42d238"
-  integrity sha512-E37/vIGBpFFF9qyoWFccj7lW2iqCoYAGvC5hKIdMLqU8c6R0heyQHG0uIbsGLS+/TrhSih4UnIJtYG3fM2XMlQ==
+"@cardano-foundation/ledgerjs-hw-app-cardano@https://github.com/vacuumlabs/ledgerjs-cardano-shelley/releases/download/v3.0.0-rc.2/cardano-foundation-ledgerjs-hw-app-cardano-v3.0.0-rc.2.tgz":
+  version "3.0.0-rc.2"
+  resolved "https://github.com/vacuumlabs/ledgerjs-cardano-shelley/releases/download/v3.0.0-rc.2/cardano-foundation-ledgerjs-hw-app-cardano-v3.0.0-rc.2.tgz#cfa6d50eb064bfbb152a6c198a875812ef381e78"
   dependencies:
     "@ledgerhq/hw-transport" "^5.12.0"
-    babel-polyfill "^6.26.0"
-    babel-runtime "^6.26.0"
+    "@types/ledgerhq__hw-transport" "^4.21.3"
     base-x "^3.0.5"
     bech32 "^1.1.4"
     node-int64 "^0.4.0"
+
+"@emurgo/js-chain-libs@https://github.com/SebastienGllmt/js-chain-libs-pkg":
+  version "0.7.1"
+  resolved "https://github.com/SebastienGllmt/js-chain-libs-pkg#86b4ab49440c3e46f7d802bf4a92bfa7c290280a"
 
 "@ledgerhq/devices@^5.15.0":
   version "5.15.0"
@@ -207,10 +209,22 @@
   resolved "https://registry.yarnpkg.com/@sinonjs/text-encoding/-/text-encoding-0.7.1.tgz#8da5c6530915653f3a1f38fd5f101d8c3f8079c5"
   integrity sha512-+iTbntw2IZPb/anVDbypzfQa+ay64MW0Zo8aJ8gZPWMMK6/OubMVb6lUPMagqjOPnmtauXnFCACVl3O7ogjeqQ==
 
+"@types/ledgerhq__hw-transport@^4.21.3":
+  version "4.21.3"
+  resolved "https://registry.yarnpkg.com/@types/ledgerhq__hw-transport/-/ledgerhq__hw-transport-4.21.3.tgz#1e658da6b5d01ffab92f9660cf57121aecfa7e2c"
+  integrity sha512-6QveiZLsFLq9WZDk8HWAZhivoGzyz5S8WV36hpUe7KrVDaTR1fDdB+syorrNRhYbyjraAuUJrIdJR5p/7doq8g==
+  dependencies:
+    "@types/node" "*"
+
 "@types/lodash@^4.14.168":
   version "4.14.168"
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.168.tgz#fe24632e79b7ade3f132891afff86caa5e5ce008"
   integrity sha512-oVfRvqHV/V6D1yifJbVRU3TMp8OT6o6BG+U9MkwuJ3U8/CsDHvalRpsxBqivn71ztOFZBTfJMvETbqHiaNSj7Q==
+
+"@types/node@*":
+  version "14.14.35"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.14.35.tgz#42c953a4e2b18ab931f72477e7012172f4ffa313"
+  integrity sha512-Lt+wj8NVPx0zUmUwumiVXapmaLUcAk3yPuHCFVXras9k5VT9TdhJqKqGVUQCD60OTMCl0qxJ57OiTL0Mic3Iag==
 
 "@types/node@11.11.6":
   version "11.11.6"
