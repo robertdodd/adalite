@@ -108,7 +108,9 @@ const Delegate = ({
           Fee
           <AdaIcon />
         </label>
-        <div className="delegation-fee">{printAda(delegationFee)}</div>
+        <div className="delegation-fee" data-cy="Delegate fee amount">
+          {printAda(delegationFee)}
+        </div>
       </div>
       <div className="validation-row">
         <button
@@ -119,6 +121,7 @@ const Delegate = ({
             calculatingDelegationFee ||
             !stakePool?.poolHash
           }
+          data-cy="Delegate button"
           onClick={delegationHandler}
           {...tooltip(
             'You are using Shelley incompatible wallet. To delegate your ADA, follow the instructions to convert your wallet.',
