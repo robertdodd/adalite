@@ -2,32 +2,31 @@
 /// <reference types="@testing-library/cypress" />
 /// <reference path="../support/index.d.ts" />
 
-const navigateToStaking = () => {
-  cy.dataCy('Navigation tabs')
-    .contains('Staking')
-    .click()
-
-  cy.contains('Staking balance').should('be.visible')
-  cy.contains('Current Delegation').should('be.visible')
-  cy.contains('Staking and Rewards History').should('be.visible')
-  cy.contains('Delegate Stake')
-    .as('DelegateAccordion')
-    .should('be.visible')
-
-  // expand delegation card if it is hidden
-  cy.dataCy('Delegate button')
-    .as('DelegateButton')
-    .then(($button) => {
-      // @ts-ignore: Is exists for a jquery button
-      if (!$button.is(':visible')) {
-        cy.get('@DelegateAccordion').click()
-      }
-    })
-}
-
 describe('Staking tab', () => {
+  beforeEach('Navigates to Staking tab', () => {
+    cy.dataCy('Navigation tabs')
+      .contains('Staking')
+      .click()
+
+    cy.contains('Staking balance').should('be.visible')
+    cy.contains('Current Delegation').should('be.visible')
+    cy.contains('Staking and Rewards History').should('be.visible')
+    cy.contains('Delegate Stake')
+      .as('DelegateAccordion')
+      .should('be.visible')
+
+    // expand delegation card if it is hidden
+    cy.dataCy('Delegate button')
+      .as('DelegateButton')
+      .then(($button) => {
+        // @ts-ignore: Is exists for a jquery button
+        if (!$button.is(':visible')) {
+          cy.get('@DelegateAccordion').click()
+        }
+      })
+  })
+
   it('Delegate to a valid pool', () => {
-    navigateToStaking()
     const poolId = '48f2c367cfe81cac6687c3f7c26613edfe73cd329402aa5cf493bb61'
     cy.dataCy('Pool delegation text field')
       .should('be.visible')
@@ -53,7 +52,6 @@ describe('Staking tab', () => {
   })
 
   it('Validate invalid stake pool id', () => {
-    navigateToStaking()
     const poolId = 'invalid_id'
     cy.dataCy('Pool delegation text field')
       .should('be.visible')

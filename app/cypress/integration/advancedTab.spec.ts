@@ -3,16 +3,17 @@
 /// <reference path="../support/index.d.ts" />
 
 describe('Advanced tab', () => {
-  it('Validates initial state of advanced tab', () => {
+  beforeEach('Navigates to Advanced tab', () => {
     cy.dataCy('Navigation tabs')
       .contains('Advanced')
       .click()
+  })
 
+  it('Validates initial state of advanced tab', () => {
     cy.dataCy('Advanced key card').should('be.visible')
     cy.dataCy('Pool registration card').should('be.visible')
     // disabled for mnemonic users
     cy.contains('Select a transaction file').should('be.visible')
-    // .and('be.disabled')
     cy.dataCy('Advanced sign button')
       .should('be.visible')
       .and('be.disabled')

@@ -3,13 +3,14 @@
 /// <reference path="../support/index.d.ts" />
 
 describe('Receive tab', () => {
-  it('Validate receive tab addresses', () => {
+  beforeEach('Navigates to Receive tab', () => {
     cy.dataCy('Navigation tabs')
       .contains('Receive')
       .click()
+  })
 
+  it('Validate receive tab addresses', () => {
     cy.contains('My Addresses')
-
     // first is shown,
     cy.dataCy('Receive address item')
       .as('AddressItems')
