@@ -5,6 +5,7 @@
 require('dotenv').config(
   process.env.DOTENV_CONFIG_PATH ? {path: process.env.DOTENV_CONFIG_PATH} : {}
 )
+
 const check = require('check-types')
 
 // process.env.npm_package_version is undefined on Heroku
