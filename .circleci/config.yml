@@ -34,13 +34,7 @@ jobs:
           command: cd app && yarn build && cd ../
       - run:
           name: Start server with correct env for cypress tests
-          command: >
-            yarn generate-cert && ADALITE_ENABLE_HTTPS=true
-            ADALITE_SERVER_URL='https://localhost:3000' PORT=3000
-            ADALITE_BLOCKCHAIN_EXPLORER_URL='https://explorer-testnet.adalite.io'
-            ADALITE_NETWORK='MARY_TESTNET' ADALITE_ENABLE_SERVER_MOCKING_MODE=true
-            ADALITE_MOCK_TX_SUBMISSION_SUCCESS=true ADALITE_MOCK_TX_SUMMARY_SUCCESS=true
-            yarn start-server
+          command: yarn cypress:dev
           wait-on: https://localhost:3000
           background: true
       - run:
